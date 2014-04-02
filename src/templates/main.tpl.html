@@ -12,16 +12,17 @@
     <link href="static/plugin/twitter-bootstrap/css/bootstrap.css" rel="stylesheet">
     <link href="static/plugin/twitter-bootstrap/css/bootstrap-responsive.css" rel="stylesheet">
     <link href="static/css/style.css" rel="stylesheet">
-    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+	<!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
     <!--[if lt IE 9]>
     <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
-    <![endif]-->
+	<![endif]-->
     <script type="text/javascript" src="static/plugin/jquery-1.7.1.min.js"></script>
     <script type="text/javascript" src="static/plugin/twitter-bootstrap/js/bootstrap.min.js"></script>
     <script type="text/javascript" src="static/js/scripts.js"></script>
     <script type="text/javascript">
         $(document).bind('ready', function(){
 			psm_flash_message();
+			psm_tooltips();
         });
     </script>
   </head>
@@ -29,7 +30,7 @@
     <!-- navbar -->
     <div class="navbar navbar-fixed-top">
       <div class="navbar-inner">
-        <div class="container">
+        <div class="container-fluid">
           <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
             <span class="icon-bar"></span>
             <span class="icon-bar"></span>
@@ -43,21 +44,25 @@
     <!-- /navbar -->
 
     <!-- container -->
-    <div class="container">
-
+    <div class="container-fluid">
         <div class="page-header">
-            <h1>
-                {subtitle}
-                <small>&nbsp;</small>
-            </h1>
+            <h1>{subtitle}<small>&nbsp;</small></h1>
         </div>
         <div class="row-fluid">
-			<div class="span12">
-				<div id="flashmessage" class="alert alert-info hide">{message}</div>
+			{html_sidebar}
+			<div class="span{content_span}">
+				<div id="flashmessage" class="hide">
+				<!--%tpl_repeat_messages-->
+				<div class="alert alert-{shortcode}">
+					<p class="pull-left span1"><i class="icon-{icon}"></i></p>
+					<p>{message}</p>
+				</div>
+				<!--%%tpl_repeat_messages-->
+				{messages}
+				</div>
+				{content}
 			</div>
-        </div>
-        <div class="row-fluid">{content}</div>
-
+		</div>
 		{html_footer}
     </div>
     <!-- /container -->
@@ -67,25 +72,22 @@
 
 <!--%tpl_main_menu-->
           <div class="nav-collapse">
+			<ul class="nav pull-right">
+              <li class="dropdown">
+                <a href="#" class="dropdown-toggle" data-toggle="dropdown">{label_usermenu} <b class="caret"></b></a>
+                <ul class="dropdown-menu">
+                  <li><a href="{url_profile}"><i class="icon-cog"></i>&nbsp;{label_profile}</a></li>
+                  <li><a href="{url_logout}"><i class="icon-off"></i>&nbsp;{label_logout}</a></li>
+                </ul>
+              </li>
+			</ul>
             <ul class="nav">
-                <li id="nav_option_servers" class="{active_servers}">
-                    <a href="index.php?type=servers">{label_servers}</a>
+				<!--%tpl_repeat_menu-->
+                <li class="{active}">
+                    <a href="{url}">{label}</a>
                 </li>
-                <li id="nav_option_users" class="{active_users}">
-                    <a href="index.php?type=users">{label_users}</a>
-                </li>
-                <li id="nav_option_log" class="{active_log}">
-                    <a href="index.php?type=log">{label_log}</a>
-                </li>
-                <li id="nav_option_status" class="{active_status}">
-                    <a href="index.php?type=status">{label_status}</a>
-                </li>
-                <li id="nav_option_config" class="{active_config}">
-                    <a href="index.php?type=config">{label_config}</a>
-                </li>
-                <li id="nav_option_update">
-                    <a href="index.php?action=check">{label_update}</a>
-                </li>
+				<!--%%tpl_repeat_menu-->
+				{menu}
                 <li id="nav_option_help">
                     <a href="http://www.phpservermonitor.org/" target="_blank">{label_help}</a>
                 </li>
@@ -100,11 +102,6 @@
 <!--%tpl_main_footer-->
         <footer class="footer">
           <p class="pull-right"><a href="#">{label_back_to_top}</a></p>
-          <p>
-              Powered by <a href="http://www.phpservermonitor.org/" target="_blank">PHP Server Monitor</a> and
-              <a href="http://twitter.github.com/bootstrap/">Twitter Bootstrap</a>
-              <br/>
-              Copyright &copy; 2008-2014 <a href="mailto:pep@neanderthal-technology.com">Pepijn Over</a>
-          </p>
+          <p><small>Powered by <a href="http://www.phpservermonitor.org/" target="_blank">PHP Server Monitor</a>.<br/>{update_available}</small></p>
         </footer>
 <!--%%tpl_main_footer-->

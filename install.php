@@ -29,11 +29,5 @@ define('PSM_INSTALL', true);
 
 require 'src/bootstrap.php';
 
-psm_no_cache();
-
-$type = 'install';
-$tpl = new \psm\Service\Template();
-$mod = new psm\Module\Install($db, $tpl);
-$mod->initialize();
-
-?>
+$router = new psm\Router();
+$router->run('install');

@@ -29,22 +29,5 @@ require 'src/bootstrap.php';
 
 psm_no_cache();
 
-if(isset($_GET['action']) && $_GET['action'] == 'check') {
-	require 'cron/status.cron.php';
-	header('Location: index.php');
-}
-
-$type = (!isset($_GET['type'])) ? 'servers' : $_GET['type'];
-$allowed_types = array('servers', 'users', 'log', 'config', 'status');
-
-// make sure user selected a valid type. if so, include the file and add to template
-if(!in_array($type, $allowed_types)) {
-	$type = $allowed_types[0];
-}
-$tpl = new \psm\Service\Template();
-
-eval('$mod = new psm\Module\\'.ucfirst($type).'($db, $tpl);');
-// let the module prepare it's HTML code
-$mod->initialize();
-
-?>
+$router = new psm\Router();
+$router->run();

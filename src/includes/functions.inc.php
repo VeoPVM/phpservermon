@@ -63,10 +63,18 @@ function psm_load_lang($lang) {
 	$lang_file = PSM_PATH_LANG . $lang . '.lang.php';
 
 	if(!file_exists($lang_file)) {
-		die('unable to load language file: ' . $lang_file);
+		// If the file has been removed, we use the english one
+		$en_file = PSM_PATH_LANG . 'en_US.lang.php';
+		if(!file_exists($en_file)) {
+			// OK, nothing we can do
+			die('unable to load language file: ' . $lang_file);
+		}
+		$lang_file = $en_file;
 	}
 
 	require $lang_file;
+	$locale = basename($lang_file, '.lang.php');
+	setlocale(LC_TIME, $locale);
 
 	$GLOBALS['sm_lang'] = $sm_lang;
 }
@@ -83,8 +91,20 @@ function psm_get_langs() {
 	$langs = array();
 
 	foreach($lang_files as $file) {
-		$langs[] = str_replace($fn_ext, '', basename($file));
+		$key = str_replace($fn_ext, '', basename($file));
+		$sm_lang = array();
+		if(file_exists($file)) {
+			require $file;
+		}
+		if(isset($sm_lang['name'])) {
+			$name = $sm_lang['name'];
+		} else {
+			$name = $key;
+		}
+		$langs[$key] = $name;
+		unset($sm_lang);
 	}
+	ksort($langs);
 	return $langs;
 }
 
@@ -139,6 +159,7 @@ function psm_update_conf($key, $value) {
 		array('value' => $value),
 		array('key' => $key)
 	);
+	$GLOBALS['sm_config'][$key] = $value;
 }
 
 ###############################################
@@ -179,7 +200,7 @@ function psm_log_uptime($server_id, $status, $latency) {
     global $db;
 
     $db->save(
-        PSM_DB_PREFIX.'uptime',
+        PSM_DB_PREFIX.'servers_uptime',
         array(
             'server_id' => $server_id,
             'date' => date('Y-m-d H:i:s'),
@@ -192,13 +213,13 @@ function psm_log_uptime($server_id, $status, $latency) {
 /**
  * Parses a string from the language file with the correct variables replaced in the message
  *
- * @param string $status is either 'on' or 'off'
+ * @param boolean $status
  * @param string $type is either 'sms' or 'email'
  * @param array $server information about the server which may be placed in a message: %KEY% will be replaced by your value
  * @return string parsed message
  */
 function psm_parse_msg($status, $type, $vars) {
-	$message = '';
+	$status = ($status == true) ? 'on' : 'off';
 
 	$message = psm_get_lang('notifications', $status . '_' . $type);
 
@@ -230,8 +251,9 @@ function psm_curl_get($href, $header = false, $body = true, $timeout = 10, $add_
 	curl_setopt($ch, CURLOPT_NOBODY, (!$body));
 	curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-	curl_setopt ($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
-	curl_setopt ($ch, CURLOPT_TIMEOUT, $timeout);
+	curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
+	curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+	curl_setopt($ch, CURLOPT_ENCODING, '');
 	curl_setopt($ch, CURLOPT_URL, $href);
 	if($add_agent) {
 		curl_setopt ($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.11) Gecko/20071127 Firefox/2.0.0.11');
@@ -247,55 +269,85 @@ function psm_curl_get($href, $header = false, $body = true, $timeout = 10, $add_
  * Get a "nice" timespan message
  *
  * Source: http://www.interactivetools.com/forum/forum-posts.php?postNum=2208966
- * @param int $time
+ * @param string $time
  * @return string
- * @todo add translation to timespan messages
  */
 function psm_timespan($time) {
+	if(empty($time) || $time == '0000-00-00 00:00:00') {
+		return psm_get_lang('system', 'never');
+	}
 	if ($time !== intval($time)) { $time = strtotime($time); }
-	$d = time() - $time;
 	if ($time < strtotime(date('Y-m-d 00:00:00')) - 60*60*24*3) {
-		$format = 'F j';
-		if (date('Y') !== date('Y', $time)) {
-			$format .= ", Y";
+		$format = psm_get_lang('system', (date('Y') !== date('Y', $time)) ? 'long_day_format' : 'short_day_format');
+		// Check for Windows to find and replace the %e
+		// modifier correctly
+		if (strtoupper(substr(PHP_OS, 0, 3)) == 'WIN') {
+			$format = preg_replace('#(?<!%)((?:%%)*)%e#', '\1%#d', $format);
 		}
-		return date($format, $time);
+		return strftime($format, $time);
 	}
+	$d = time() - $time;
 	if ($d >= 60*60*24) {
-		$day = 'Yesterday';
-		if (date('l', time() - 60*60*24) !== date('l', $time)) { $day = date('l', $time); }
-		return $day . " at " . date('g:ia', $time);
+		$format = psm_get_lang('system', (date('l', time() - 60*60*24) == date('l', $time)) ? 'yesterday_format' : 'other_day_format');
+		return strftime($format, $time);
 	}
-	if ($d >= 60*60*2) { return intval($d / (60*60)) . " hours ago"; }
-	if ($d >= 60*60) { return "about an hour ago"; }
-	if ($d >= 60*2) { return intval($d / 60) . " minutes ago"; }
-	if ($d >= 60) { return "about a minute ago"; }
-	if ($d >= 2) { return intval($d) . " seconds ago"; }
+	if ($d >= 60*60*2) { return sprintf(psm_get_lang('system', 'hours_ago'), intval($d / (60*60))); }
+	if ($d >= 60*60) { return psm_get_lang('system', 'an_hour_ago'); }
+	if ($d >= 60*2) { return sprintf(psm_get_lang('system', 'minutes_ago'), intval($d / 60)); }
+	if ($d >= 60) { return psm_get_lang('system', 'a_minute_ago'); }
+	if ($d >= 2) { return sprintf(psm_get_lang('system', 'seconds_ago'), intval($d));intval($d); }
 
-	return "a few seconds ago";
+	return psm_get_lang('system', 'a_second_ago');
 }
 
 /**
- * Check if an update is available for PHP Server Monitor
+ * Get a localised date from MySQL date format
+ * @param string $time
+ * @return string
+ */
+function psm_date($time) {
+	if(empty($time) || $time == '0000-00-00 00:00:00') {
+		return psm_get_lang('system', 'never');
+	}
+	return strftime('%x %X', strtotime($time));
+}
+
+/**
+ * Check if an update is available for PHP Server Monitor.
  *
+ * Will only check for new version if user turned updates on in config.
  * @global object $db
  * @return boolean
  */
-function psm_check_updates() {
+function psm_update_available() {
 	global $db;
+
+	if(!psm_get_conf('show_update')) {
+		// user does not want updates, fair enough.
+		return false;
+	}
 
 	$last_update = psm_get_conf('last_update_check');
 
-	if((time() - (7 * 24 * 60 * 60)) > $last_update) {
+	if((time() - PSM_UPDATE_INTERVAL) > $last_update) {
 		// been more than a week since update, lets go
-		// update "update-date"
-		$db->save(PSM_DB_PREFIX . 'config', array('value' => time()), array('key' => 'last_update_check'));
-		$latest = psm_curl_get('http://www.phpservermonitor.org/version.php');
-		$current = psm_get_conf('version');
-
-		return version_compare($latest, $current, '>');
+		// update last check date
+		psm_update_conf('last_update_check', time());
+		$latest = psm_curl_get(PSM_UPDATE_URL);
+		// add latest version to database
+		if($latest !== false && strlen($latest) < 15) {
+			psm_update_conf('version_update_check', $latest);
+		}
+	} else {
+		$latest = psm_get_conf('version_update_check');
 	}
-	return false;
+
+	if($latest != false) {
+		$current = psm_get_conf('version');
+		return version_compare($latest, $current, '>');
+	} else {
+		return false;
+	}
 }
 
 /**
@@ -338,6 +390,75 @@ function psm_build_mail($from_name = null, $from_email = null) {
 	return $phpmailer;
 }
 
+/**
+ * Generate a new link to the current monitor
+ * @param array $params key value pairs
+ * @param boolean $urlencode urlencode all params?
+ * @param boolean $htmlentities use entities in url?
+ * @return string
+ */
+function psm_build_url($params = array(), $urlencode = true, $htmlentities = true) {
+	$defports = array(80, 443);
+	$url = ($_SERVER['SERVER_PORT'] == 443 ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+	if(!in_array($_SERVER['SERVER_PORT'], $defports)) {
+		$url .= ':' . $_SERVER['SERVER_PORT'];
+	}
+	$url .= dirname($_SERVER['SCRIPT_NAME']) . '/';
+
+	if($params != null) {
+		$url .= '?';
+		$delim = ($htmlentities) ? '&amp;' : '&';
+
+		foreach($params as $k => $v) {
+			if($urlencode) {
+				$v = urlencode($v);
+			}
+			$url .= $delim . $k . '=' . $v;
+		}
+	}
+
+	return $url;
+}
+
+/**
+ * Try existence of a GET var, if not return the alternative
+ * @param string $key
+ * @param string $alt
+ * @return mixed
+ */
+function psm_GET($key, $alt = null) {
+	if(isset($_GET[$key])) {
+		return $_GET[$key];
+	} else {
+		return $alt;
+	}
+}
+
+/**
+ * Try existence of a POST var, if not return the alternative
+ * @param string $key
+ * @param string $alt
+ * @return mixed
+ */
+function psm_POST($key, $alt = null) {
+	if(isset($_POST[$key])) {
+		return $_POST[$key];
+	} else {
+		return $alt;
+	}
+}
+
+/**
+ * Check if we are in CLI mode
+ *
+ * Note, php_sapi cannot be used because cgi-fcgi returns both for web and cli
+ * source: https://api.drupal.org/api/drupal/includes!bootstrap.inc/function/drupal_is_cli/7
+ * @return boolean
+ */
+function psm_is_cli() {
+	return (!isset($_SERVER['SERVER_SOFTWARE']) && (php_sapi_name() == 'cli' || (is_numeric($_SERVER['argc']) && $_SERVER['argc'] > 0)));
+}
+
 ###############################################
 #
 # Debug functions
@@ -365,5 +486,3 @@ function psm_no_cache() {
 	header("Cache-Control: no-cache, must-revalidate");
 	header("Pragma: no-cache");
 }
-
-?>
